@@ -31,7 +31,7 @@ int col_G;
 #define N 8
 
 // Function to get the cofactor of an element
-void getCofactor(int mat[N][N], int temp[N][N], int p, int q, int n) {
+void getCofactor(int(*mat)[8], int temp[N][N], int p, int q, int n) {
     int i = 0, j = 0;
     for (int row = 0; row < n; row++) {
         for (int col = 0; col < n; col++) {
@@ -47,7 +47,7 @@ void getCofactor(int mat[N][N], int temp[N][N], int p, int q, int n) {
 }
 
 // Recursive function to find the determinant
-int determinantOfMatrix(int mat[N][N], int n) {
+int determinantOfMatrix(int(*mat)[8], int n) {
     int D = 0;
     if (n == 1)
         return mat[0][0];
@@ -64,8 +64,41 @@ int determinantOfMatrix(int mat[N][N], int n) {
     return D;
 }
 
+void getCofactor4(int(*mat)[4], int temp[4][4], int p, int q, int n) {
+    int i = 0, j = 0;
+    for (int row = 0; row < n; row++) {
+        for (int col = 0; col < n; col++) {
+            if (row != p && col != q) {
+                temp[i][j++] = mat[row][col];
+                if (j == n - 1) {
+                    j = 0;
+                    i++;
+                }
+            }
+        }
+    }
+}
+
+// Recursive function to find the determinant
+int determinantOfMatrix4(int(*mat)[4], int n) {
+    int D = 0;
+    if (n == 1)
+        return mat[0][0];
+
+    int temp[4][4];
+    int sign = 1;
+
+    for (int f = 0; f < n; f++) {
+        getCofactor4(mat, temp, 0, f, n);
+        D += sign * mat[0][f] * determinantOfMatrix4(temp, n - 1);
+        sign = -sign;
+    }
+
+    return D;
+}
+
 // Function to find the adjoint of the matrix
-void adjoint(int mat[8][8], int adj[8][8]) {
+void adjoint(int(*mat)[8], int adj[8][8]) {
     for (int i = 0; i < 8; i++) {
         for (int j = 0; j < 8; j++) {
             int temp[8][8];
@@ -77,7 +110,7 @@ void adjoint(int mat[8][8], int adj[8][8]) {
 }
 
 // Function to find the inverse of the matrix (rounded to integers)
-void inverse8(int(*mat)[8], int inv[8][8]) {
+void inverse8(int(*mat)[8], int(*inv)[8]) {
     int det = determinantOfMatrix(mat, 8);
     if (det == 0) {
         printf("Matrix is singular; inverse does not exist.\n");
@@ -174,11 +207,7 @@ void genSMatrix(privateKEYPTR p1,int k) {
         }
 
         // Check if the matrix is invertible
-        int det = 1;
-        for (int i = 0; i < k; i++) {
-            det *= p1->S[i][i];
-        }
-
+        int det = determinantOfMatrix4(p1->S, 4);
         if (det != 0.0) {
             return; // Matrix is invertible
         }
@@ -286,21 +315,29 @@ int all_zeros(int* d, int size) {
 // Function to perform syndrome lookup
 int syndromeLookup(int(*H)[8], int(*d)[8]) {
     int t[8][4]; // Assuming H is a 4x8 matrix
-    int s[4];
+    int s[24];
 
-    // Convert H to transpose
+    // Convert d to transpose
     for (int i = 0; i < 8; ++i) {
         for (int j = 0; j < 4; ++j) {
-            t[i][j] = H[j][i];
+            t[i][j] = d[j][i];
         }
     }
 
+    int sCount = 0;
+    printf("\n s syndrome \n");
     // Convert d to a 1D array
-    for (int i = 0; i < 4; ++i) {
-        s[i] = d[i][0];
-    }
+    for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            s[sCount] = t[i][j];
+            printf("%d,", s[sCount]);
+            sCount++;
+        }
 
-    if (all_zeros(s, 4)) {
+    }
+    printf("\n s syndrome \n");
+
+    if (all_zeros(s, 24)) {
         return 0;
     }
 
@@ -458,52 +495,66 @@ void InvertMatrix(const double m[16], int invOut[16]) {
     }
     return;
 }
+
 void inverse(int(*mat)[4],int(*inv)[4])
 {
-    double arr[16];
-    int count=0;
+    double vec[16];
+    int inv1[16];
+    int count = 0;
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j <4 ; ++j) {
-            arr[count] = mat[i][j];
+            vec[count] = mat[i][j];
             count++;
         }
     }
-
     count = 0;
-    int invout[16];
+    InvertMatrix(vec, inv1);
     for (int i = 0; i < 4; ++i) {
-        for (int j = 0; j <4 ; ++j) {
-            inv[i][j] = (invout[count]);
+        for (int j = 0; j < 4; ++j) {
+            inv[i][j] = inv1[count];
             count++;
         }
     }
 }
 
 void decrypt( privateKEYPTR p1,int(*c)[8],int(*res)[4]) {
-    int (*cHat)[8] = malloc(sizeof(int[8][8]));
-    modTwoMatrix(p1->P,8,8);
-    int (*transpose)[8] = malloc(sizeof(int[8][8]));
+    int (*cHat)[8] = malloc(sizeof(int[1][8]));
+    int(*inversedP)[8] = malloc(sizeof(int[8][8]));
+    inverse8(p1->P, inversedP);
+    for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            inversedP[i][j] = abs(inversedP[i][j]);
+        }
+    }
+    modTwoMatrix(inversedP, 8, 8);
+    int (*transpose)[1] = malloc(sizeof(int[8][1]));
 
 // Compute the transpose
     n_G = 8;
-    p_G=8;
-    multiplyMatrix(cHat,c,p1->P,8,8,8);
-    for (int i = 0; i < 8; ++i) {
+    p_G = 1;
+    multiplyMatrix(cHat, c, inversedP, 1, 8, 8);
+
+    for (int i = 0; i < 1; ++i) {
         for (int j = 0; j < 8; ++j) {
             transpose[j][i] = cHat[i][j];
         }
     }
-    int (*CH)[8] = malloc(sizeof(int[4][8]));
-    n_G = 4;
-    p_G = 8;
-    multiplyMatrix(CH,p1->H,cHat,4,8,8);
+    int (*CH)[1] = malloc(sizeof(int[4][1]));
+    n_G = 8;
+    p_G = 1;
+    multiplyMatrix(CH, p1->H, transpose, 4, 8, 1);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 1; ++j) {
+            CH[i][j] = abs(CH[i][j] % 2);
+        }
+    }
     modTwoMatrix(CH,4,8);
-    int syndrome = syndromeLookup(p1->H,CH); // Placeholder value
+    int syndrome = syndromeLookup(p1->H, CH);
 
     bitFlip(cHat[0],8,syndrome);
     int (*m1)[4] = malloc(sizeof(int[1][4]));
     for (int i = 0; i < 4; ++i) {
-        m1[0][i] = cHat[0][i]%2;
+        m1[0][i] = abs(cHat[0][i] % 2);
     }
     int(*inv)[4] = malloc(sizeof(int[4][4]));
     for (int i = 0; i < 4; ++i) {
@@ -511,21 +562,47 @@ void decrypt( privateKEYPTR p1,int(*c)[8],int(*res)[4]) {
             inv[i][j] = p1->S[i][j];
         }
     }
-    int(*inversed)[4] = malloc(sizeof(int[4][4]));
+    int(*inversedS)[4] = malloc(sizeof(int[4][4]));
+    inverse(inv, inversedS);
+    printf("S before \n");
 
-    inverse(inv,inversed);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            printf("%d ,", inv[i][j]);
+        }
+        printf("\n");
+    }
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            inversedS[i][j] = abs(inversedS[i][j]);
+        }
+    }
+    printf("inv \n");
+
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            printf("%d ,", inversedS[i][j]);
+        }
+        printf("\n");
+    }
+
     n_G =1;
     p_G= 4;
-    multiplyMatrix(res,m1,inversed,1,4,4);
+    multiplyMatrix(res, m1, inversedS, 1, 4, 4);
     free(CH);
     free(inv);
     free(m1);
     free(cHat);
-    free(inversed);
+    free(inversedS);
+    free(inversedP);
+    free(transpose);
 }
 
 void decrpytFull(privateKEYPTR p1)
 {
+    int countFOR = 0;
+    int countFOR2 = 0;
+
     int* m = (int*) malloc(sizeof(int*)*length*2);
     FILE *fp = fopen("Chipher.txt", "r");
     if (fp == NULL)
@@ -534,7 +611,7 @@ void decrpytFull(privateKEYPTR p1)
         return;
     }
     // write to the text file
-    printf("\n");
+    printf("m \n");
     for (int i = 0; i<length*2; i++)
     {
        m[i] = fgetc( fp)-'0';
@@ -548,26 +625,30 @@ void decrpytFull(privateKEYPTR p1)
     for (int i = 0; i < length; ++i) {
         decodedI[i] =0;
     }
-    printf("\n");
-    for (int i = 0; i < length; ++i) {
-        printf("%d,",decodedI[i]);
-    }
-    printf("\n");
 
-    for(int i = 0;i<length/8;i++)
+    for (int i = 0; i < length / 4; i++)
     {
+        printf("subarr \n");
         for (int j = 0;j<8;j++)
         {
-            SubArr[0][j] = m[i*8+j];
+            SubArr[0][j] = m[countFOR2];
+            countFOR2++;
+            printf("%d,", SubArr[0][j]);
         }
+        printf("\n");
         int(*dec)[4] = malloc(sizeof(int[1][4]));
         decrypt(p1,SubArr,dec);
-        free(dec);
         for (int j = 0; j < 4; ++j) {
-            decodedI[i*+j] = dec[0][j];
+            decodedI[countFOR] = abs((dec[0][j]) % 2);
+            countFOR++;
+
         }
+        printf("\n");
+        free(dec);
     }
-    for (int i = 0; i <length ; ++i) {
+
+    printf("\n");
+    for (int i = 0; i < length; ++i) {
         printf("%d, ",decodedI[i]);
     }
     free(m);
@@ -709,18 +790,29 @@ int main() {
     printf("h worked");
     genSMatrix(p1,4);
     genPMatrix(p1,8,0);
+    printf("\n show p matrix \n");
+    for (int i = 0; i < 8; ++i) {
+        for (int j = 0; j < 8; ++j) {
+            printf("%d,", p1->P[i][j]);
+        }
+        printf("\n");
+    }
     printf("llen is : %d \n",length);
     int* cipheri = (int*)malloc((sizeof(int)*length*2));
     encryptFull(cipheri,p1,arrayFile);
     for (int i = 0; i < length*2; ++i) {
         printf("%d, ",cipheri[i]);
     }
+
     printf("\n");
     decrpytFull(p1);
     free(cipheri);
     free(arrayFile);
     free(p1->G);
     free(p1->H);
+    free(p1->S);
+    free(p1->P);
+    free(p1->GPRIME);
     free(p1);
     return 0;
 }
